@@ -1,0 +1,12 @@
+# Secrets
+firmware/src/secrets.h
+
+# PlatformIO
+firmware/.pio/
+
+# Node / Vite
+dashboard/node_modules/
+dashboard/dist/
+
+# OneDrive conflict artifacts
+*.resolved.*
