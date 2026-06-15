@@ -350,20 +350,26 @@ void loop() {
     publishMessage(TOPIC_EGG_DATA, "{\"eggs_l1\": 0, \"eggs_l2\": 0, \"total\": 0}");
   }
 
-  // Dynamic Feeding Schedule
-  if ((now.hour() == schedFeedHours[0] || now.hour() == schedFeedHours[1]) && (now.unixtime() - lastFeedEpoch > GRACE_PERIOD_SEC)) {
+  // Dynamic Feeding Schedule — skip if cycle already active
+  if (feedState == FEED_IDLE &&
+      (now.hour() == schedFeedHours[0] || now.hour() == schedFeedHours[1]) &&
+      (now.unixtime() - lastFeedEpoch > GRACE_PERIOD_SEC)) {
     lastFeedEpoch = now.unixtime();
     startFeedingCycle();
   }
 
-  // Dynamic Egg Collection Schedule
-  if ((now.hour() == schedEggHours[0] || now.hour() == schedEggHours[1]) && (now.unixtime() - lastEggEpoch > GRACE_PERIOD_SEC)) {
+  // Dynamic Egg Collection Schedule — skip if cycle already active
+  if (eggState == EGG_IDLE &&
+      (now.hour() == schedEggHours[0] || now.hour() == schedEggHours[1]) &&
+      (now.unixtime() - lastEggEpoch > GRACE_PERIOD_SEC)) {
     lastEggEpoch = now.unixtime();
     startEggCollection();
   }
 
-  // Dynamic Waste Management Schedule
-  if ((now.hour() == schedWasteHours[0] || now.hour() == schedWasteHours[1]) && (now.unixtime() - lastWasteEpoch > GRACE_PERIOD_SEC)) {
+  // Dynamic Waste Management Schedule — skip if cycle already active
+  if (wasteState == WASTE_IDLE &&
+      (now.hour() == schedWasteHours[0] || now.hour() == schedWasteHours[1]) &&
+      (now.unixtime() - lastWasteEpoch > GRACE_PERIOD_SEC)) {
     lastWasteEpoch = now.unixtime();
     startWasteCycle();
   }

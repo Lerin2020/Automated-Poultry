@@ -47,27 +47,27 @@ void IRAM_ATTR countEgg_L2() {
 }
 
 void initializeHardware() {
-  // Gantry motor (BTS7960)
-  pinMode(PIN_FEED_LPWM, OUTPUT);
-  pinMode(PIN_FEED_RPWM, OUTPUT);
-  pinMode(PIN_FEED_EN, OUTPUT);
+  // BTS7960 gantry motor — all LOW = coasting/off
+  pinMode(PIN_FEED_LPWM, OUTPUT);  digitalWrite(PIN_FEED_LPWM, LOW);
+  pinMode(PIN_FEED_RPWM, OUTPUT);  digitalWrite(PIN_FEED_RPWM, LOW);
+  pinMode(PIN_FEED_EN,   OUTPUT);  digitalWrite(PIN_FEED_EN,   LOW);
 
-  // Auger motor relay
-  pinMode(PIN_AUGER_RELAY, OUTPUT);
-  digitalWrite(PIN_AUGER_RELAY, LOW);
+  // Auger relay — LOW = off
+  pinMode(PIN_AUGER_RELAY, OUTPUT); digitalWrite(PIN_AUGER_RELAY, LOW);
 
-  // Egg collection
-  pinMode(PIN_EGG_MOTOR_L, OUTPUT);
-  pinMode(PIN_EGG_MOTOR_R, OUTPUT);
-  pinMode(PIN_EGG_IR1, INPUT_PULLUP);  // NPN sensor: HIGH normally, LOW when egg detected
-  pinMode(PIN_EGG_IR2, INPUT_PULLUP);  // FALLING edge interrupt fires on detection
+  // Egg belt relays — LOW = off
+  pinMode(PIN_EGG_MOTOR_L, OUTPUT); digitalWrite(PIN_EGG_MOTOR_L, LOW);
+  pinMode(PIN_EGG_MOTOR_R, OUTPUT); digitalWrite(PIN_EGG_MOTOR_R, LOW);
 
-  // Waste relay
-  pinMode(PIN_WASTE_RELAY, OUTPUT);
+  // Egg IR sensors
+  pinMode(PIN_EGG_IR1, INPUT_PULLUP);
+  pinMode(PIN_EGG_IR2, INPUT_PULLUP);
 
-  // Temperature & humidity
+  // Waste relay — LOW = off
+  pinMode(PIN_WASTE_RELAY, OUTPUT); digitalWrite(PIN_WASTE_RELAY, LOW);
+
   dht.begin();
-  Serial.println("[HW] DHT22 initialized on GPIO " + String(PIN_DHT22));
+  Serial.println("[HW] All outputs initialised LOW. DHT22 on GPIO " + String(PIN_DHT22));
 }
 
 void readDHT() {
