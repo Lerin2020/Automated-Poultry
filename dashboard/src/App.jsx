@@ -22,6 +22,11 @@ function App() {
   const prevEggTotal = useRef(0);
   const [eggAnimKey, setEggAnimKey] = useState(0);
 
+  // Track previous cycle states to detect idle transitions outside of state updaters
+  const prevFeedState  = useRef('idle');
+  const prevEggCycleState  = useRef('idle');
+  const prevWasteState = useRef('idle');
+
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
   const showToast = (msg) => {
@@ -47,16 +52,22 @@ function App() {
     const u = [
       subscribe('poultry/feed/status', m => {
         const d = JSON.parse(m.payloadString);
-        setFeedState(p => { if (p.state !== 'idle' && d.state === 'idle') showToast('Feeding cycle complete'); return {...p,...d}; });
+        if (prevFeedState.current !== 'idle' && d.state === 'idle') showToast('Feeding cycle complete');
+        if (d.state) prevFeedState.current = d.state;
+        setFeedState(p => ({...p, ...d}));
       }),
       subscribe('poultry/egg/status', m => {
         const d = JSON.parse(m.payloadString);
-        setEggState(p => { if (p.state === 'collecting' && d.state === 'idle') showToast(`Egg collection complete — ${d.total ?? p.total} eggs`); return {...p,...d}; });
+        if (prevEggCycleState.current === 'collecting' && d.state === 'idle') showToast(`Egg collection complete — ${d.total ?? 0} eggs`);
+        if (d.state) prevEggCycleState.current = d.state;
+        setEggState(p => ({...p, ...d}));
       }),
       subscribe('poultry/egg/data', m => { const d = JSON.parse(m.payloadString); setEggState(p => ({...p,...d})); if (d.total !== undefined && d.total !== prevEggTotal.current) { prevEggTotal.current = d.total; setEggAnimKey(k => k+1); } }),
       subscribe('poultry/waste/status', m => {
         const d = JSON.parse(m.payloadString);
-        setWasteState(p => { if (p.state !== 'idle' && d.state === 'idle') showToast('Waste flush complete'); return {...p,...d}; });
+        if (prevWasteState.current !== 'idle' && d.state === 'idle') showToast('Waste flush complete');
+        if (d.state) prevWasteState.current = d.state;
+        setWasteState(p => ({...p, ...d}));
       }),
       subscribe('poultry/alerts', () => { if (activeTab !== 'admin') setAlertCount(c => c+1); }),
       subscribe('poultry/config/status', m => { const c = JSON.parse(m.payloadString); setSchedule(p => ({ feed: c.feed || p.feed, egg: c.egg || p.egg, waste: c.waste || p.waste })); }),
