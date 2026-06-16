@@ -91,9 +91,8 @@ void setupWiFi() {
 
 // Non-blocking: kick off a reconnect attempt and check the result on later
 // loop passes — never stall the loop while motor cycles are running.
-bool wifiWasDown = false;
-
 void reconnectWiFi() {
+  static bool wifiWasDown = false;
   if (WiFi.status() == WL_CONNECTED) {
     if (wifiWasDown) {
       wifiWasDown = false;
@@ -201,12 +200,13 @@ void setup() {
   loadScheduleConfig();
   initializeHardware();
 
-  // Treat boot time as "last run" so a reboot during a scheduled hour
-  // doesn't immediately re-trigger a cycle (e.g. double-feeding).
+  // Seed epochs with boot time, then restore any persisted values that are
+  // more recent — prevents double-triggering after a reboot mid-hour.
   unsigned long bootEpoch = rtc.now().unixtime();
-  lastFeedEpoch = bootEpoch;
-  lastEggEpoch = bootEpoch;
+  lastFeedEpoch  = bootEpoch;
+  lastEggEpoch   = bootEpoch;
   lastWasteEpoch = bootEpoch;
+  loadLastRunEpochs(bootEpoch);
   
   setupWiFi();
   
@@ -325,14 +325,20 @@ void loop() {
   // Process command requests (set by MQTT callbacks)
   if (feedStartRequested) {
     feedStartRequested = false;
+    lastFeedEpoch = rtc.now().unixtime();
+    saveLastRunEpochs();
     startFeedingCycle();
   }
   if (eggStartRequested) {
     eggStartRequested = false;
+    lastEggEpoch = rtc.now().unixtime();
+    saveLastRunEpochs();
     startEggCollection();
   }
   if (wasteStartRequested) {
     wasteStartRequested = false;
+    lastWasteEpoch = rtc.now().unixtime();
+    saveLastRunEpochs();
     startWasteCycle();
   }
   
@@ -355,6 +361,7 @@ void loop() {
       (now.hour() == schedFeedHours[0] || now.hour() == schedFeedHours[1]) &&
       (now.unixtime() - lastFeedEpoch > GRACE_PERIOD_SEC)) {
     lastFeedEpoch = now.unixtime();
+    saveLastRunEpochs();
     startFeedingCycle();
   }
 
@@ -363,6 +370,7 @@ void loop() {
       (now.hour() == schedEggHours[0] || now.hour() == schedEggHours[1]) &&
       (now.unixtime() - lastEggEpoch > GRACE_PERIOD_SEC)) {
     lastEggEpoch = now.unixtime();
+    saveLastRunEpochs();
     startEggCollection();
   }
 
@@ -371,6 +379,7 @@ void loop() {
       (now.hour() == schedWasteHours[0] || now.hour() == schedWasteHours[1]) &&
       (now.unixtime() - lastWasteEpoch > GRACE_PERIOD_SEC)) {
     lastWasteEpoch = now.unixtime();
+    saveLastRunEpochs();
     startWasteCycle();
   }
   
@@ -385,19 +394,19 @@ void loop() {
       now.year(), now.month(), now.day(),
       now.hour(), now.minute(), now.second());
     
-    int qSize = getQueueSize();
-    
-    String hbPayload = "{\"status\":\"online\""
-      ",\"heap\":" + String(ESP.getFreeHeap()) +
-      ",\"rssi\":" + String(WiFi.RSSI()) +
-      ",\"temp\":" + String(lastTemp, 1) +
-      ",\"humidity\":" + String(lastHumidity, 1) +
-      ",\"rtc\":\"" + String(rtcBuf) + "\"" +
-      ",\"queue\":" + String(qSize) +
-      ",\"dht_ok\":" + String(dhtValid ? "true" : "false") +
-      ",\"ip\":\"" + WiFi.localIP().toString() + "\"" +
-      "}";
-    
+    JsonDocument hbDoc;
+    hbDoc["status"]   = "online";
+    hbDoc["heap"]     = ESP.getFreeHeap();
+    hbDoc["rssi"]     = WiFi.RSSI();
+    hbDoc["temp"]     = serialized(String(lastTemp, 1));
+    hbDoc["humidity"] = serialized(String(lastHumidity, 1));
+    hbDoc["rtc"]      = rtcBuf;
+    hbDoc["queue"]    = getQueueSize();
+    hbDoc["dht_ok"]   = dhtValid;
+    hbDoc["ip"]       = WiFi.localIP().toString();
+
+    String hbPayload;
+    serializeJson(hbDoc, hbPayload);
     mqtt.publish(TOPIC_SYSTEM_STAT, hbPayload);
     
     // Temperature danger alert
@@ -412,5 +421,4 @@ void loop() {
     }
   }
   
-  delay(1);
 }

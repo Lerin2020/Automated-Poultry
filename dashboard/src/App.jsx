@@ -22,6 +22,14 @@ function App() {
   const prevEggTotal = useRef(0);
   const [eggAnimKey, setEggAnimKey] = useState(0);
 
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
+  const showToast = (msg) => {
+    clearTimeout(toastTimer.current);
+    setToast(msg);
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
+  };
+
   const [isDarkMode, setIsDarkMode] = useState(() => { const s = localStorage.getItem('poultry-dark-mode'); return s !== null ? s === 'true' : true; });
   useEffect(() => { document.documentElement.classList.toggle('dark', isDarkMode); localStorage.setItem('poultry-dark-mode', isDarkMode); }, [isDarkMode]);
 
@@ -37,10 +45,19 @@ function App() {
 
   useEffect(() => {
     const u = [
-      subscribe('poultry/feed/status', m => setFeedState(p => ({...p,...JSON.parse(m.payloadString)}))),
-      subscribe('poultry/egg/status', m => setEggState(p => ({...p,...JSON.parse(m.payloadString)}))),
+      subscribe('poultry/feed/status', m => {
+        const d = JSON.parse(m.payloadString);
+        setFeedState(p => { if (p.state !== 'idle' && d.state === 'idle') showToast('Feeding cycle complete'); return {...p,...d}; });
+      }),
+      subscribe('poultry/egg/status', m => {
+        const d = JSON.parse(m.payloadString);
+        setEggState(p => { if (p.state === 'collecting' && d.state === 'idle') showToast(`Egg collection complete — ${d.total ?? p.total} eggs`); return {...p,...d}; });
+      }),
       subscribe('poultry/egg/data', m => { const d = JSON.parse(m.payloadString); setEggState(p => ({...p,...d})); if (d.total !== undefined && d.total !== prevEggTotal.current) { prevEggTotal.current = d.total; setEggAnimKey(k => k+1); } }),
-      subscribe('poultry/waste/status', m => setWasteState(p => ({...p,...JSON.parse(m.payloadString)}))),
+      subscribe('poultry/waste/status', m => {
+        const d = JSON.parse(m.payloadString);
+        setWasteState(p => { if (p.state !== 'idle' && d.state === 'idle') showToast('Waste flush complete'); return {...p,...d}; });
+      }),
       subscribe('poultry/alerts', () => { if (activeTab !== 'admin') setAlertCount(c => c+1); }),
       subscribe('poultry/config/status', m => { const c = JSON.parse(m.payloadString); setSchedule(p => ({ feed: c.feed || p.feed, egg: c.egg || p.egg, waste: c.waste || p.waste })); }),
     ];
@@ -71,6 +88,11 @@ function App() {
 
   return (
     <div className="page">
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: '#22c55e', color: '#fff', padding: '10px 20px', borderRadius: 12, fontWeight: 600, fontSize: 14, boxShadow: '0 4px 16px rgba(0,0,0,.25)', pointerEvents: 'none' }} className="anim-fade">
+          {toast}
+        </div>
+      )}
       {/* ══ HEADER ══ */}
       <header className="header anim-fade">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -231,8 +253,8 @@ function App() {
                   <div style={{ marginTop: 8, textAlign: 'right' }}><span className="progress-label">Target: {perCycleGrams.toFixed(2)}kg per cycle</span></div>
                 </div>
                 <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-                  <button onClick={handleFeed} disabled={feedActive} className="btn-primary" style={{ flex: 1 }}>Force Feed</button>
-                  <button onClick={handleStopFeed} className="btn-stop">Stop</button>
+                  <button onClick={handleFeed} disabled={feedActive || !isBrokerConnected} className="btn-primary" style={{ flex: 1 }}>Force Feed</button>
+                  <button onClick={handleStopFeed} disabled={!isBrokerConnected} className="btn-stop">Stop</button>
                 </div>
               </div>
               ); })()}
@@ -260,8 +282,8 @@ function App() {
                   <div className="stat-total"><span className="stat-total-label">Total Collected</span><span key={`t-${eggAnimKey}`} className="stat-total-value anim-pop">{eggState.total}</span></div>
                 </div>
                 <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-                  <button onClick={handleCollectEgg} disabled={eggState.state==='collecting'} className="btn-primary" style={{ flex: 1 }}>Force Collect</button>
-                  <button onClick={handleStopEgg} className="btn-stop">Stop</button>
+                  <button onClick={handleCollectEgg} disabled={eggState.state==='collecting' || !isBrokerConnected} className="btn-primary" style={{ flex: 1 }}>Force Collect</button>
+                  <button onClick={handleStopEgg} disabled={!isBrokerConnected} className="btn-stop">Stop</button>
                 </div>
               </div>
             </div>
@@ -284,8 +306,8 @@ function App() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 12, marginLeft: 'auto' }}>
-                <button onClick={handleWaste} disabled={wasteState.state==='active'} className="btn-primary" style={{ padding: '10px 20px' }}>Force Flush</button>
-                <button onClick={handleStopWaste} className="btn-stop" style={{ padding: '10px 16px' }}><Square size={15} fill="currentColor" /></button>
+                <button onClick={handleWaste} disabled={wasteState.state==='active' || !isBrokerConnected} className="btn-primary" style={{ padding: '10px 20px' }}>Force Flush</button>
+                <button onClick={handleStopWaste} disabled={!isBrokerConnected} className="btn-stop" style={{ padding: '10px 16px' }}><Square size={15} fill="currentColor" /></button>
               </div>
             </div>
           </div>

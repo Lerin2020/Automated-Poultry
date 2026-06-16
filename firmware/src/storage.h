@@ -228,6 +228,47 @@ void loadScheduleConfig() {
     feedDistributeDuration, feedPauseDuration, feedReverseDuration, eggCollectDuration, wasteCycleDuration);
 }
 
+// ─── Last-run epoch persistence ───
+// Saves/loads the three "last ran at" timestamps so a reboot mid-hour
+// doesn't re-trigger a cycle that already ran before the reset.
+
+#define EPOCH_FILE "/epochs.json"
+
+extern unsigned long lastFeedEpoch;
+extern unsigned long lastEggEpoch;
+extern unsigned long lastWasteEpoch;
+
+void saveLastRunEpochs() {
+  JsonDocument doc;
+  doc["feed"]  = lastFeedEpoch;
+  doc["egg"]   = lastEggEpoch;
+  doc["waste"] = lastWasteEpoch;
+  File file = SPIFFS.open(EPOCH_FILE, FILE_WRITE);
+  if (file) { serializeJson(doc, file); file.close(); }
+}
+
+void loadLastRunEpochs(unsigned long bootEpoch) {
+  if (!SPIFFS.exists(EPOCH_FILE)) return;
+  File file = SPIFFS.open(EPOCH_FILE, FILE_READ);
+  if (!file) return;
+  size_t size = file.size();
+  std::unique_ptr<char[]> buf(new char[size]);
+  file.readBytes(buf.get(), size);
+  file.close();
+  JsonDocument doc;
+  if (deserializeJson(doc, buf.get(), size)) return;
+  // Only restore if the stored epoch is more recent than boot — if the
+  // clock was reset or the file is stale, fall back to bootEpoch.
+  if (doc["feed"].is<unsigned long>()  && doc["feed"].as<unsigned long>()  > bootEpoch - 86400)
+    lastFeedEpoch  = doc["feed"].as<unsigned long>();
+  if (doc["egg"].is<unsigned long>()   && doc["egg"].as<unsigned long>()   > bootEpoch - 86400)
+    lastEggEpoch   = doc["egg"].as<unsigned long>();
+  if (doc["waste"].is<unsigned long>() && doc["waste"].as<unsigned long>() > bootEpoch - 86400)
+    lastWasteEpoch = doc["waste"].as<unsigned long>();
+  Serial.printf("[EPOCHS] Restored: Feed=%lu Egg=%lu Waste=%lu\n",
+    lastFeedEpoch, lastEggEpoch, lastWasteEpoch);
+}
+
 void publishCurrentConfig() {
   JsonDocument doc;
   
