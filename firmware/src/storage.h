@@ -23,6 +23,11 @@ unsigned long feedReverseDuration    = DEFAULT_FEED_REVERSE_DURATION;
 unsigned long eggCollectDuration     = DEFAULT_EGG_COLLECT_DURATION;
 unsigned long wasteCycleDuration     = DEFAULT_WASTE_CYCLE_DURATION;
 
+// ─── Gantry speed + auger behaviour (editable from dashboard) ───
+int feedSpeedPct       = DEFAULT_FEED_SPEED;        // gantry forward duty %
+int feedReturnSpeedPct = DEFAULT_FEED_RETURN_SPEED; // gantry reverse duty %
+int augerMode          = DEFAULT_AUGER_MODE;        // see AUGER_* in config.h
+
 void initStorage() {
   if (!SPIFFS.begin(true)) {
     Serial.println("An Error has occurred while mounting SPIFFS");
@@ -168,6 +173,11 @@ void saveScheduleConfig() {
   doc["egg_collect"]     = eggCollectDuration;
   doc["waste_cycle"]     = wasteCycleDuration;
 
+  // Gantry speed + auger behaviour
+  doc["feed_speed"]        = feedSpeedPct;
+  doc["feed_return_speed"] = feedReturnSpeedPct;
+  doc["auger_mode"]        = augerMode;
+
   File file = SPIFFS.open(CONFIG_FILE, FILE_WRITE);
   if (file) {
     serializeJson(doc, file);
@@ -218,6 +228,11 @@ void loadScheduleConfig() {
   if (doc["feed_reverse"].is<unsigned long>())    feedReverseDuration    = doc["feed_reverse"].as<unsigned long>();
   if (doc["egg_collect"].is<unsigned long>())     eggCollectDuration     = doc["egg_collect"].as<unsigned long>();
   if (doc["waste_cycle"].is<unsigned long>())     wasteCycleDuration     = doc["waste_cycle"].as<unsigned long>();
+
+  // Gantry speed + auger behaviour
+  if (doc["feed_speed"].is<int>())        feedSpeedPct       = constrain(doc["feed_speed"].as<int>(), 0, 100);
+  if (doc["feed_return_speed"].is<int>()) feedReturnSpeedPct = constrain(doc["feed_return_speed"].as<int>(), 0, 100);
+  if (doc["auger_mode"].is<int>())        augerMode          = constrain(doc["auger_mode"].as<int>(), 0, 3);
 
   Serial.printf("[CONFIG] Loaded: Feed[%d,%d] Egg[%d,%d] Waste[%d,%d] Threshold=%d\n",
     schedFeedHours[0], schedFeedHours[1],
@@ -325,6 +340,11 @@ void publishCurrentConfig() {
   doc["feed_reverse"]    = feedReverseDuration / 1000;
   doc["egg_collect"]     = eggCollectDuration / 1000;
   doc["waste_cycle"]     = wasteCycleDuration / 1000;
+
+  // Gantry speed + auger behaviour (sent as-is)
+  doc["feed_speed"]        = feedSpeedPct;
+  doc["feed_return_speed"] = feedReturnSpeedPct;
+  doc["auger_mode"]        = augerMode;
 
   String payload;
   serializeJson(doc, payload);

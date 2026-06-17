@@ -119,6 +119,17 @@ export default function AdminPanel({ heartbeatData, publish, subscribe, onAnyMes
   const [wasteCycle, setWasteCycle] = useState(8);
   const [timingsPushed, setTimingsPushed] = useState(false);
 
+  // ── Gantry speed (%) + auger run mode ──
+  const [feedSpeed, setFeedSpeed] = useState(100);
+  const [feedReturnSpeed, setFeedReturnSpeed] = useState(100);
+  const [augerMode, setAugerMode] = useState(0);
+  const AUGER_MODES = [
+    { v: 0, label: 'Distribute only (default)' },
+    { v: 1, label: 'Entire cycle' },
+    { v: 2, label: 'While moving (out + back)' },
+    { v: 3, label: 'Off (gantry only)' },
+  ];
+
   const syncRTC = () => {
     const tzOffsetSec = new Date().getTimezoneOffset() * -60;
     const epoch = Math.floor(Date.now() / 1000) + tzOffsetSec;
@@ -141,6 +152,9 @@ export default function AdminPanel({ heartbeatData, publish, subscribe, onAnyMes
         if(c.feed_reverse!==undefined) setFeedReverse(c.feed_reverse);
         if(c.egg_collect!==undefined) setEggCollect(c.egg_collect);
         if(c.waste_cycle!==undefined) setWasteCycle(c.waste_cycle);
+        if(c.feed_speed!==undefined) setFeedSpeed(c.feed_speed);
+        if(c.feed_return_speed!==undefined) setFeedReturnSpeed(c.feed_return_speed);
+        if(c.auger_mode!==undefined) setAugerMode(c.auger_mode);
       } catch {}
     });
     publish('poultry/config/cmd', JSON.stringify({ action: 'get_config' }));
@@ -159,7 +173,10 @@ export default function AdminPanel({ heartbeatData, publish, subscribe, onAnyMes
       feed_pause: feedPause,
       feed_reverse: feedReverse,
       egg_collect: eggCollect,
-      waste_cycle: wasteCycle
+      waste_cycle: wasteCycle,
+      feed_speed: feedSpeed,
+      feed_return_speed: feedReturnSpeed,
+      auger_mode: augerMode
     }));
     setTimingsPushed(true); setTimeout(() => setTimingsPushed(false), 2000);
   };
@@ -300,6 +317,27 @@ export default function AdminPanel({ heartbeatData, publish, subscribe, onAnyMes
                   <input type="number" min={1} max={60} value={feedReverse} onChange={e => setFeedReverse(Math.max(1,+e.target.value))} className="input-num" />
                   <span className="gauge-label">sec</span>
                 </div>
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="gauge-label">Distribute speed</span>
+                  <span className="gauge-value" style={{ color: '#6366f1' }}>{feedSpeed}%</span>
+                </div>
+                <input type="range" min={0} max={100} value={feedSpeed} onChange={e => setFeedSpeed(+e.target.value)} className="range" />
+              </div>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="gauge-label">Return speed</span>
+                  <span className="gauge-value" style={{ color: '#6366f1' }}>{feedReturnSpeed}%</span>
+                </div>
+                <input type="range" min={0} max={100} value={feedReturnSpeed} onChange={e => setFeedReturnSpeed(+e.target.value)} className="range" />
+              </div>
+              <div>
+                <label className="label" style={{ marginBottom: 6, display: 'block' }}>Auger runs during</label>
+                <select value={augerMode} onChange={e => setAugerMode(+e.target.value)} className="select-btn" style={{ width: '100%', padding: '8px 12px', borderRadius: 8, fontSize: 13 }}>
+                  {AUGER_MODES.map(m => <option key={m.v} value={m.v}>{m.label}</option>)}
+                </select>
               </div>
             </div>
           </div>

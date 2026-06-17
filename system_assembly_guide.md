@@ -9,7 +9,7 @@ This document serves as your master blueprint for taking the PoultryMG system fr
 The feeding system relies on a gravity-fed gantry mechanism traversing over the cage troughs.
 
 ### Required Materials
-- 1x 12V High-Torque DC Motor (Wiper motor or linear actuator style) for the gantry
+- 2x 12V High-Torque DC Motor (Wiper motor or linear actuator style) for the gantry
 - 1x BTS7960 43A Motor Driver (for precision gantry PWM)
 - 1x Auger / screw-conveyor motor (relay-driven, controls feed flow from the hopper)
 - 1x 4-Channel 5V Relay Module, **active-LOW** (drives auger, both egg belts, and waste motor)
@@ -19,7 +19,7 @@ The feeding system relies on a gravity-fed gantry mechanism traversing over the 
 - 2x E18-D80NK NPN Proximity Sensors (Yellow type)
 - 1x 10kΩ Resistor (pull-up for DHT22 data line)
 - 2x 4.7kΩ–10kΩ Resistors (pull-ups for the two proximity-sensor signal lines)
-- Hopper rig and PVC piping (3" inner diameter)
+- Hopper rig and PVC piping (2" inner diameter)
 
 ### Step 1: Constructing the Track & Gantry
 1. **Mount the Track**: Install a rigid linear rail or C-channel beam exactly centered above the feeding troughs spanning the length of your poultry cages.

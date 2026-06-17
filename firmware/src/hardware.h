@@ -14,6 +14,11 @@ extern unsigned long feedReverseDuration;
 extern unsigned long eggCollectDuration;
 extern unsigned long wasteCycleDuration;
 
+// ─── Gantry speed + auger behaviour (defined in storage.h) ───
+extern int feedSpeedPct;
+extern int feedReturnSpeedPct;
+extern int augerMode;
+
 // DHT22 Sensor
 DHT dht(PIN_DHT22, DHT22);
 float lastTemp = 0.0;
@@ -98,11 +103,43 @@ enum FeedState { FEED_IDLE, FEED_DISTRIBUTING, FEED_PAUSE, FEED_REVERSE };
 FeedState feedState = FEED_IDLE;
 unsigned long feedStepStart = 0;
 
+// Drive the BTS7960 gantry via PWM. dir>0 forward, dir<0 reverse, dir==0 stop.
+// speedPct (0–100) maps to an 8-bit analogWrite duty on the active direction pin.
+// NOTE: once these pins are driven with analogWrite they are owned by LEDC —
+// never digitalWrite them again; use setGantry(0,...) to stop.
+void setGantry(int dir, int speedPct) {
+  int duty = (constrain(speedPct, 0, 100) * 255) / 100;
+  if (dir > 0) {            // forward / distribute
+    analogWrite(PIN_FEED_RPWM, 0);
+    analogWrite(PIN_FEED_LPWM, duty);
+    digitalWrite(PIN_FEED_EN, HIGH);
+  } else if (dir < 0) {     // reverse / return home
+    analogWrite(PIN_FEED_LPWM, 0);
+    analogWrite(PIN_FEED_RPWM, duty);
+    digitalWrite(PIN_FEED_EN, HIGH);
+  } else {                  // stop (coast)
+    analogWrite(PIN_FEED_LPWM, 0);
+    analogWrite(PIN_FEED_RPWM, 0);
+    digitalWrite(PIN_FEED_EN, LOW);
+  }
+}
+
+// Set the auger relay according to the configured mode for a given feed state.
+void setAugerForState(FeedState st) {
+  bool on;
+  switch (augerMode) {
+    case AUGER_OFF:         on = false; break;
+    case AUGER_FULL_CYCLE:  on = (st == FEED_DISTRIBUTING || st == FEED_PAUSE || st == FEED_REVERSE); break;
+    case AUGER_MOVING_ONLY: on = (st == FEED_DISTRIBUTING || st == FEED_REVERSE); break;
+    case AUGER_DISTRIBUTE_ONLY:
+    default:                on = (st == FEED_DISTRIBUTING); break;
+  }
+  digitalWrite(PIN_AUGER_RELAY, on ? RELAY_ON : RELAY_OFF);
+}
+
 void haltFeedHardware() {
   digitalWrite(PIN_AUGER_RELAY, RELAY_OFF);
-  digitalWrite(PIN_FEED_EN, LOW);
-  digitalWrite(PIN_FEED_LPWM, LOW);
-  digitalWrite(PIN_FEED_RPWM, LOW);
+  setGantry(0, 0);
 }
 
 void startFeedingCycle() {
@@ -113,16 +150,14 @@ void startFeedingCycle() {
   feedStopRequested = false;
   feedState = FEED_DISTRIBUTING;
   feedStepStart = millis();
-  
-  // Auger ON + Gantry forward — simultaneously
-  digitalWrite(PIN_AUGER_RELAY, RELAY_ON);
-  digitalWrite(PIN_FEED_LPWM, HIGH);
-  digitalWrite(PIN_FEED_RPWM, LOW);
-  digitalWrite(PIN_FEED_EN, HIGH);
-  
+
+  // Auger (per configured mode) + Gantry forward at configured speed
+  setAugerForState(FEED_DISTRIBUTING);
+  setGantry(1, feedSpeedPct);
+
   publishMessage(TOPIC_FEED_STAT, "{\"state\": \"distributing\"}");
   logActivity("feed", "started", "");
-  Serial.println("[FEED] === DISTRIBUTING === Auger ON + Gantry FWD");
+  Serial.printf("[FEED] === DISTRIBUTING === Gantry FWD @ %d%%, augerMode=%d\n", feedSpeedPct, augerMode);
 }
 
 void updateFeedCycle() {
@@ -143,27 +178,25 @@ void updateFeedCycle() {
   switch (feedState) {
     case FEED_DISTRIBUTING:
       if (elapsed >= feedDistributeDuration) {
-        // Stop auger + stop gantry
-        digitalWrite(PIN_AUGER_RELAY, RELAY_OFF);
-        digitalWrite(PIN_FEED_EN, LOW);
-        digitalWrite(PIN_FEED_LPWM, LOW);
+        // Stop gantry; auger follows the configured mode during the pause
+        setGantry(0, 0);
         feedState = FEED_PAUSE;
         feedStepStart = millis();
+        setAugerForState(FEED_PAUSE);
         publishMessage(TOPIC_FEED_STAT, "{\"state\": \"pausing\"}");
         Serial.println("[FEED] Pause at far end");
       }
       break;
-      
+
     case FEED_PAUSE:
       if (elapsed >= feedPauseDuration) {
-        // Gantry reverse — return home
-        digitalWrite(PIN_FEED_LPWM, LOW);
-        digitalWrite(PIN_FEED_RPWM, HIGH);
-        digitalWrite(PIN_FEED_EN, HIGH);
+        // Gantry reverse — return home at configured return speed
         feedState = FEED_REVERSE;
         feedStepStart = millis();
+        setAugerForState(FEED_REVERSE);
+        setGantry(-1, feedReturnSpeedPct);
         publishMessage(TOPIC_FEED_STAT, "{\"state\": \"returning\"}");
-        Serial.println("[FEED] Gantry REVERSE");
+        Serial.printf("[FEED] Gantry REVERSE @ %d%%\n", feedReturnSpeedPct);
       }
       break;
       

@@ -88,6 +88,18 @@ const unsigned long EGG_PUBLISH_INTERVAL          = 1000;   // Live count publis
 // Waste Cycle
 const unsigned long DEFAULT_WASTE_CYCLE_DURATION  = 8000;   // How long waste conveyor runs (8s)
 
+// ── Gantry PWM speed (percent of full duty, 0–100) ──
+// Applied to the active BTS7960 direction pin via analogWrite (8-bit: 0–255).
+const int DEFAULT_FEED_SPEED        = 100;  // forward (distribute) speed %
+const int DEFAULT_FEED_RETURN_SPEED = 100;  // reverse (return home) speed %
+
+// ── Auger run mode during the feed cycle ──
+#define AUGER_DISTRIBUTE_ONLY 0  // auger runs only while distributing (default, original behaviour)
+#define AUGER_FULL_CYCLE      1  // auger runs the entire cycle (distribute + pause + return)
+#define AUGER_MOVING_ONLY     2  // auger runs whenever the gantry moves (distribute + return)
+#define AUGER_OFF             3  // auger never runs (gantry only)
+const int DEFAULT_AUGER_MODE = AUGER_DISTRIBUTE_ONLY;
+
 // System
 const unsigned long HEARTBEAT_INTERVAL_SEC = 30;    // Seconds between heartbeats
 

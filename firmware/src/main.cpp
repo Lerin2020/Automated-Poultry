@@ -174,11 +174,17 @@ void handleConfigCommand(const String& message) {
     if (doc["egg_collect"].is<int>())     eggCollectDuration     = constrain(doc["egg_collect"].as<int>(), 1, 600) * 1000UL;
     if (doc["waste_cycle"].is<int>())     wasteCycleDuration     = constrain(doc["waste_cycle"].as<int>(), 1, 600) * 1000UL;
 
+    // Gantry speed (0–100%) and auger run mode (0–3)
+    if (doc["feed_speed"].is<int>())        feedSpeedPct       = constrain(doc["feed_speed"].as<int>(), 0, 100);
+    if (doc["feed_return_speed"].is<int>()) feedReturnSpeedPct = constrain(doc["feed_return_speed"].as<int>(), 0, 100);
+    if (doc["auger_mode"].is<int>())        augerMode          = constrain(doc["auger_mode"].as<int>(), 0, 3);
+
     saveScheduleConfig();
     publishCurrentConfig();
 
-    Serial.printf("[CONFIG] Timings updated(ms): FeedDist=%lu FeedPause=%lu FeedRev=%lu EggCol=%lu Waste=%lu\n",
-      feedDistributeDuration, feedPauseDuration, feedReverseDuration, eggCollectDuration, wasteCycleDuration);
+    Serial.printf("[CONFIG] Timings updated(ms): FeedDist=%lu FeedPause=%lu FeedRev=%lu EggCol=%lu Waste=%lu | Speed=%d%% Return=%d%% AugerMode=%d\n",
+      feedDistributeDuration, feedPauseDuration, feedReverseDuration, eggCollectDuration, wasteCycleDuration,
+      feedSpeedPct, feedReturnSpeedPct, augerMode);
   }
 }
 
@@ -256,7 +262,7 @@ void setup() {
   });
 
   mqtt.subscribe(TOPIC_CONFIG_CMD, [](const char* topic, const char* payload) {
-    char buf[256];
+    char buf[384];
     strncpy(buf, payload, sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
     Serial.printf("[MQTT-RX] %s -> %s\n", topic, buf);
