@@ -5,6 +5,7 @@
 
 extern PicoMQTT::Server mqtt;
 extern void publishMessage(const char* topic, const String& payload);
+extern void logActivity(const char* subsystem, const char* event, const char* detail);
 
 // ─── Timing variables (defined in storage.h) ───
 extern unsigned long feedDistributeDuration;
@@ -116,6 +117,7 @@ void startFeedingCycle() {
   digitalWrite(PIN_FEED_EN, HIGH);
   
   publishMessage(TOPIC_FEED_STAT, "{\"state\": \"distributing\"}");
+  logActivity("feed", "started", "");
   Serial.println("[FEED] === DISTRIBUTING === Auger ON + Gantry FWD");
 }
 
@@ -127,6 +129,7 @@ void updateFeedCycle() {
     haltFeedHardware();
     feedState = FEED_IDLE;
     publishMessage(TOPIC_FEED_STAT, "{\"state\": \"idle\"}");
+    logActivity("feed", "stopped", "user");
     Serial.println("[FEED] STOPPED by user");
     return;
   }
@@ -165,6 +168,7 @@ void updateFeedCycle() {
         haltFeedHardware();
         feedState = FEED_IDLE;
         publishMessage(TOPIC_FEED_STAT, "{\"state\": \"idle\"}");
+        logActivity("feed", "complete", "");
         Serial.println("[FEED] === CYCLE COMPLETE ===");
       }
       break;
@@ -204,6 +208,7 @@ void startEggCollection() {
   eggLastPublish = 0;
   
   publishMessage(TOPIC_EGG_STAT, "{\"state\": \"collecting\", \"eggs_l1\": 0, \"eggs_l2\": 0, \"total\": 0}");
+  logActivity("egg", "started", "");
   Serial.println("[EGG] === COLLECTION STARTED ===");
 }
 
@@ -230,6 +235,9 @@ void finishEggCollection() {
   publishMessage(TOPIC_EGG_STAT, "{\"state\": \"idle\", \"eggs_l1\": " + String(l1) + ", \"eggs_l2\": " + String(l2) + ", \"total\": " + String(totalEggs) + "}");
   
   eggState = EGG_IDLE;
+  char eggDetail[24];
+  snprintf(eggDetail, sizeof(eggDetail), "l1=%d l2=%d total=%d", l1, l2, totalEggs);
+  logActivity("egg", "complete", eggDetail);
   Serial.println("[EGG] === COLLECTION COMPLETE === Total: " + String(totalEggs));
 }
 
@@ -239,6 +247,7 @@ void updateEggCollection() {
   unsigned long elapsed = millis() - eggStepStart;
   
   if (eggStopRequested || elapsed >= eggCollectDuration) {
+    if (eggStopRequested) logActivity("egg", "stopped", "user");
     eggStopRequested = false;
     finishEggCollection();
     return;
@@ -275,6 +284,7 @@ void startWasteCycle() {
   wasteStepStart = millis();
   
   publishMessage(TOPIC_WASTE_STAT, "{\"state\": \"active\"}");
+  logActivity("waste", "started", "");
   Serial.println("[WASTE] === CYCLE STARTED ===");
 }
 
@@ -284,6 +294,8 @@ void updateWasteCycle() {
   unsigned long elapsed = millis() - wasteStepStart;
   
   if (wasteStopRequested || elapsed >= wasteCycleDuration) {
+    if (wasteStopRequested) logActivity("waste", "stopped", "user");
+    else                    logActivity("waste", "complete", "");
     wasteStopRequested = false;
     digitalWrite(PIN_WASTE_RELAY, LOW);
     wasteState = WASTE_IDLE;

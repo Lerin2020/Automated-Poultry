@@ -309,6 +309,18 @@ void setup() {
     
     webServer.send(404, "text/plain", "File not found");
   });
+  // Activity log download endpoint — GET /log serves /activity_log.json
+  webServer.on("/log", HTTP_GET, []() {
+    if (SPIFFS.exists(LOG_FILE)) {
+      File file = SPIFFS.open(LOG_FILE, "r");
+      webServer.sendHeader("Content-Disposition", "attachment; filename=poultry_activity_log.json");
+      webServer.streamFile(file, "application/json");
+      file.close();
+    } else {
+      webServer.send(200, "application/json", "[]");
+    }
+  });
+
   webServer.begin();
   Serial.printf("[HTTP] Dashboard at http://%s.local (port 80)\n", MDNS_HOSTNAME);
 }

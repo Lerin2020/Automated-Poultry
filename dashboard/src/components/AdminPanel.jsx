@@ -73,7 +73,7 @@ function HourPicker({ value, onChange }) {
   );
 }
 
-export default function AdminPanel({ heartbeatData, publish, subscribe, onAnyMessage, isESPOnline }) {
+export default function AdminPanel({ heartbeatData, publish, subscribe, onAnyMessage, isESPOnline, brokerHost }) {
   // ── RTC clock — parse ISO string with explicit local interpretation ──
   const [rtcTime, setRtcTime] = useState(null);
   const rtcBaseRef = useRef(null);
@@ -332,6 +332,7 @@ export default function AdminPanel({ heartbeatData, publish, subscribe, onAnyMes
             <span className="badge badge-system" style={{ marginLeft: 4 }}>{log.length}</span>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
+            <a href={`http://${brokerHost}/log`} download="poultry_activity_log.json" className={`btn-sm${!isESPOnline ? ' btn-sm-disabled' : ''}`} style={{ textDecoration: 'none', pointerEvents: isESPOnline ? 'auto' : 'none', opacity: isESPOnline ? 1 : 0.4 }}><Download size={12} /> Activity Log</a>
             <button onClick={exportCSV} disabled={!log.length} className="btn-sm"><Download size={12} /> Export CSV</button>
             <button onClick={()=>{setLog([]);localStorage.removeItem(LOG_KEY);}} disabled={!log.length} className="btn-sm btn-sm-danger"><Trash2 size={12} /> Clear</button>
           </div>

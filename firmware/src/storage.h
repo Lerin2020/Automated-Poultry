@@ -228,6 +228,45 @@ void loadScheduleConfig() {
     feedDistributeDuration, feedPauseDuration, feedReverseDuration, eggCollectDuration, wasteCycleDuration);
 }
 
+// ─── Activity Log ───
+
+#define LOG_FILE  "/activity_log.json"
+const int MAX_LOG_ENTRIES = 200;
+
+void logActivity(const char* subsystem, const char* event, const char* detail = "") {
+  // Read existing log
+  JsonDocument doc;
+  File file = SPIFFS.open(LOG_FILE, FILE_READ);
+  if (file && file.size() > 4) {
+    size_t sz = file.size();
+    std::unique_ptr<char[]> buf(new char[sz]);
+    file.readBytes(buf.get(), sz);
+    file.close();
+    if (deserializeJson(doc, buf.get(), sz)) doc.to<JsonArray>();
+  } else {
+    if (file) file.close();
+    doc.to<JsonArray>();
+  }
+
+  JsonArray arr = doc.as<JsonArray>();
+  while ((int)arr.size() >= MAX_LOG_ENTRIES) arr.remove(0);
+
+  DateTime now = rtc.now();
+  char ts[25];
+  snprintf(ts, sizeof(ts), "%04d-%02d-%02dT%02d:%02d:%02d",
+    now.year(), now.month(), now.day(),
+    now.hour(), now.minute(), now.second());
+
+  JsonObject entry = arr.add<JsonObject>();
+  entry["ts"]  = ts;
+  entry["sub"] = subsystem;
+  entry["evt"] = event;
+  if (strlen(detail) > 0) entry["det"] = detail;
+
+  file = SPIFFS.open(LOG_FILE, FILE_WRITE);
+  if (file) { serializeJson(doc, file); file.close(); }
+}
+
 // ─── Last-run epoch persistence ───
 // Saves/loads the three "last ran at" timestamps so a reboot mid-hour
 // doesn't re-trigger a cycle that already ran before the reset.

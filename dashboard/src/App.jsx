@@ -329,6 +329,7 @@ function App() {
       {/* ══ ADMIN ══ */}
       {activeTab === 'admin' && <AdminPanel heartbeatData={heartbeatData} publish={publish} subscribe={subscribe} onAnyMessage={onAnyMessage} isESPOnline={isESPOnline} brokerHost={brokerHost} />}
 
+
       <footer className="footer">PoultryMG v1.0 — Automated Farm Intelligence</footer>
     </div>
   );
