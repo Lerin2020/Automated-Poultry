@@ -212,33 +212,33 @@ void startEggCollection() {
   Serial.println("[EGG] === COLLECTION STARTED ===");
 }
 
-void finishEggCollection() {
+void finishEggCollection(bool userStopped = false) {
   digitalWrite(PIN_EGG_MOTOR_L, LOW);
   digitalWrite(PIN_EGG_MOTOR_R, LOW);
-  
+
   detachInterrupt(digitalPinToInterrupt(PIN_EGG_IR1));
   detachInterrupt(digitalPinToInterrupt(PIN_EGG_IR2));
-  
+
   // Read volatile counters with interrupts disabled for safety
   noInterrupts();
   int l1 = eggCount_L1;
   int l2 = eggCount_L2;
   interrupts();
   int totalEggs = l1 + l2;
-  
-  if (totalEggs >= eggThreshold) {
+
+  if (!userStopped && totalEggs >= eggThreshold) {
     publishMessage(TOPIC_ALERTS, "{\"type\": \"egg_threshold\", \"message\": \"Egg yield threshold reached!\"}");
   }
-  
+
   String payload = "{\"eggs_l1\": " + String(l1) + ", \"eggs_l2\": " + String(l2) + ", \"total\": " + String(totalEggs) + "}";
   publishMessage(TOPIC_EGG_DATA, payload);
   publishMessage(TOPIC_EGG_STAT, "{\"state\": \"idle\", \"eggs_l1\": " + String(l1) + ", \"eggs_l2\": " + String(l2) + ", \"total\": " + String(totalEggs) + "}");
-  
+
   eggState = EGG_IDLE;
   char eggDetail[24];
   snprintf(eggDetail, sizeof(eggDetail), "l1=%d l2=%d total=%d", l1, l2, totalEggs);
-  logActivity("egg", "complete", eggDetail);
-  Serial.println("[EGG] === COLLECTION COMPLETE === Total: " + String(totalEggs));
+  if (!userStopped) logActivity("egg", "complete", eggDetail);
+  Serial.println("[EGG] === COLLECTION " + String(userStopped ? "STOPPED" : "COMPLETE") + " === Total: " + String(totalEggs));
 }
 
 void updateEggCollection() {
@@ -247,9 +247,10 @@ void updateEggCollection() {
   unsigned long elapsed = millis() - eggStepStart;
   
   if (eggStopRequested || elapsed >= eggCollectDuration) {
-    if (eggStopRequested) logActivity("egg", "stopped", "user");
+    bool stopped = eggStopRequested;
+    if (stopped) logActivity("egg", "stopped", "user");
     eggStopRequested = false;
-    finishEggCollection();
+    finishEggCollection(stopped);
     return;
   }
   
