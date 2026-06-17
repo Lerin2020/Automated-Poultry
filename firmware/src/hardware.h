@@ -32,6 +32,10 @@ volatile bool eggStopRequested  = false;
 volatile bool wasteStopRequested = false;
 
 void IRAM_ATTR countEgg_L1() {
+  // Reject EMI spikes: a real egg holds the NPN output LOW for many ms, so the
+  // line must still read LOW when the ISR runs. A transient glitch will have
+  // already bounced back HIGH and is ignored.
+  if (digitalRead(PIN_EGG_IR1) != LOW) return;
   unsigned long now = millis();
   if (now - lastTrigger_L1 > EGG_DEBOUNCE_MS) {
     eggCount_L1++;
@@ -40,6 +44,7 @@ void IRAM_ATTR countEgg_L1() {
 }
 
 void IRAM_ATTR countEgg_L2() {
+  if (digitalRead(PIN_EGG_IR2) != LOW) return;
   unsigned long now = millis();
   if (now - lastTrigger_L2 > EGG_DEBOUNCE_MS) {
     eggCount_L2++;
