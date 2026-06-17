@@ -20,6 +20,18 @@
 // Waste Management
 #define PIN_WASTE_RELAY  21   // Waste Conveyor Relay
 
+// ==========================================
+// RELAY TRIGGER POLARITY
+// ==========================================
+// Configured for an ACTIVE-LOW relay module (relay energizes when the
+// control pin is driven LOW). Active-LOW modules are boot-safe: the ESP32's
+// GPIOs float/glitch HIGH during the boot window before firmware runs, and
+// the module's input pull-up keeps every relay DE-ENERGIZED until the code
+// explicitly pulls a pin LOW. Set the module's jumper to LOW-level trigger.
+// (If you ever switch back to an active-HIGH module, swap these two.)
+#define RELAY_ON   LOW
+#define RELAY_OFF  HIGH
+
 // DHT22 Temperature & Humidity Sensor
 #define PIN_DHT22        6    // Data pin (10kΩ pull-up to 3.3V)
 

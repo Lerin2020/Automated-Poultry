@@ -53,19 +53,18 @@ void initializeHardware() {
   pinMode(PIN_FEED_RPWM, OUTPUT);  digitalWrite(PIN_FEED_RPWM, LOW);
   pinMode(PIN_FEED_EN,   OUTPUT);  digitalWrite(PIN_FEED_EN,   LOW);
 
-  // Auger relay — LOW = off
-  pinMode(PIN_AUGER_RELAY, OUTPUT); digitalWrite(PIN_AUGER_RELAY, LOW);
-
-  // Egg belt relays — LOW = off
-  pinMode(PIN_EGG_MOTOR_L, OUTPUT); digitalWrite(PIN_EGG_MOTOR_L, LOW);
-  pinMode(PIN_EGG_MOTOR_R, OUTPUT); digitalWrite(PIN_EGG_MOTOR_R, LOW);
+  // Relays (active-LOW module): pre-load the output latch to RELAY_OFF
+  // BEFORE switching to OUTPUT so the pin never momentarily drives the
+  // relay on. digitalWrite-before-pinMode sets the latch; pinMode then
+  // drives that level immediately.
+  digitalWrite(PIN_AUGER_RELAY, RELAY_OFF); pinMode(PIN_AUGER_RELAY, OUTPUT); digitalWrite(PIN_AUGER_RELAY, RELAY_OFF);
+  digitalWrite(PIN_EGG_MOTOR_L, RELAY_OFF); pinMode(PIN_EGG_MOTOR_L, OUTPUT); digitalWrite(PIN_EGG_MOTOR_L, RELAY_OFF);
+  digitalWrite(PIN_EGG_MOTOR_R, RELAY_OFF); pinMode(PIN_EGG_MOTOR_R, OUTPUT); digitalWrite(PIN_EGG_MOTOR_R, RELAY_OFF);
+  digitalWrite(PIN_WASTE_RELAY, RELAY_OFF); pinMode(PIN_WASTE_RELAY, OUTPUT); digitalWrite(PIN_WASTE_RELAY, RELAY_OFF);
 
   // Egg IR sensors
   pinMode(PIN_EGG_IR1, INPUT_PULLUP);
   pinMode(PIN_EGG_IR2, INPUT_PULLUP);
-
-  // Waste relay — LOW = off
-  pinMode(PIN_WASTE_RELAY, OUTPUT); digitalWrite(PIN_WASTE_RELAY, LOW);
 
   dht.begin();
   Serial.println("[HW] All outputs initialised LOW. DHT22 on GPIO " + String(PIN_DHT22));
@@ -95,7 +94,7 @@ FeedState feedState = FEED_IDLE;
 unsigned long feedStepStart = 0;
 
 void haltFeedHardware() {
-  digitalWrite(PIN_AUGER_RELAY, LOW);
+  digitalWrite(PIN_AUGER_RELAY, RELAY_OFF);
   digitalWrite(PIN_FEED_EN, LOW);
   digitalWrite(PIN_FEED_LPWM, LOW);
   digitalWrite(PIN_FEED_RPWM, LOW);
@@ -111,7 +110,7 @@ void startFeedingCycle() {
   feedStepStart = millis();
   
   // Auger ON + Gantry forward — simultaneously
-  digitalWrite(PIN_AUGER_RELAY, HIGH);
+  digitalWrite(PIN_AUGER_RELAY, RELAY_ON);
   digitalWrite(PIN_FEED_LPWM, HIGH);
   digitalWrite(PIN_FEED_RPWM, LOW);
   digitalWrite(PIN_FEED_EN, HIGH);
@@ -140,7 +139,7 @@ void updateFeedCycle() {
     case FEED_DISTRIBUTING:
       if (elapsed >= feedDistributeDuration) {
         // Stop auger + stop gantry
-        digitalWrite(PIN_AUGER_RELAY, LOW);
+        digitalWrite(PIN_AUGER_RELAY, RELAY_OFF);
         digitalWrite(PIN_FEED_EN, LOW);
         digitalWrite(PIN_FEED_LPWM, LOW);
         feedState = FEED_PAUSE;
@@ -200,9 +199,9 @@ void startEggCollection() {
   attachInterrupt(digitalPinToInterrupt(PIN_EGG_IR1), countEgg_L1, FALLING);
   attachInterrupt(digitalPinToInterrupt(PIN_EGG_IR2), countEgg_L2, FALLING);
   
-  digitalWrite(PIN_EGG_MOTOR_L, HIGH);
-  digitalWrite(PIN_EGG_MOTOR_R, HIGH);
-  
+  digitalWrite(PIN_EGG_MOTOR_L, RELAY_ON);
+  digitalWrite(PIN_EGG_MOTOR_R, RELAY_ON);
+
   eggState = EGG_COLLECTING;
   eggStepStart = millis();
   eggLastPublish = 0;
@@ -213,8 +212,8 @@ void startEggCollection() {
 }
 
 void finishEggCollection(bool userStopped = false) {
-  digitalWrite(PIN_EGG_MOTOR_L, LOW);
-  digitalWrite(PIN_EGG_MOTOR_R, LOW);
+  digitalWrite(PIN_EGG_MOTOR_L, RELAY_OFF);
+  digitalWrite(PIN_EGG_MOTOR_R, RELAY_OFF);
 
   detachInterrupt(digitalPinToInterrupt(PIN_EGG_IR1));
   detachInterrupt(digitalPinToInterrupt(PIN_EGG_IR2));
@@ -280,7 +279,7 @@ void startWasteCycle() {
   }
   wasteStopRequested = false;
   
-  digitalWrite(PIN_WASTE_RELAY, HIGH);
+  digitalWrite(PIN_WASTE_RELAY, RELAY_ON);
   wasteState = WASTE_ACTIVE;
   wasteStepStart = millis();
   
@@ -298,7 +297,7 @@ void updateWasteCycle() {
     if (wasteStopRequested) logActivity("waste", "stopped", "user");
     else                    logActivity("waste", "complete", "");
     wasteStopRequested = false;
-    digitalWrite(PIN_WASTE_RELAY, LOW);
+    digitalWrite(PIN_WASTE_RELAY, RELAY_OFF);
     wasteState = WASTE_IDLE;
     publishMessage(TOPIC_WASTE_STAT, "{\"state\": \"idle\"}");
     Serial.println("[WASTE] === CYCLE COMPLETE ===");
