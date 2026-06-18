@@ -10,7 +10,7 @@ Everything runs **on the ESP32-S3** — there is no PC server and no cloud:
 ┌─────────────────────────── ESP32-S3 ───────────────────────────┐
 │  Firmware (PlatformIO/Arduino)                                 │
 │   • PicoMQTT broker     → port 1883 (TCP) + port 81 (WebSocket)│
-│   • HTTP server         → port 80, serves dashboard from SPIFFS│
+│   • HTTP server         → port 80, serves dashboard from LittleFS│
 │   • State machines      → feed gantry, egg belts, waste relay  │
 │   • DS3231 RTC + DHT22  → schedules + temp/humidity            │
 └────────────────────────────────────────────────────────────────┘
@@ -21,7 +21,7 @@ Everything runs **on the ESP32-S3** — there is no PC server and no cloud:
 ```
 
 The React dashboard is built on your PC, then uploaded into the ESP32's
-SPIFFS flash. After that, the ESP32 is fully self-contained.
+LittleFS flash. After that, the ESP32 is fully self-contained.
 
 ## Prerequisites
 
@@ -65,7 +65,7 @@ pio run -t upload        # compile + flash firmware
 pio device monitor       # watch serial output at 115200 baud
 ```
 
-On boot you should see: SPIFFS mounted, config loaded, WiFi connected with
+On boot you should see: LittleFS mounted, config loaded, WiFi connected with
 an IP address, `[mDNS] Reachable at http://poultry.local`, and
 `[MQTT] PicoMQTT Broker started`.
 
@@ -79,7 +79,7 @@ From the **project root**:
 ```powershell
 .\deploy_dashboard.ps1     # builds the React app, gzips it into firmware\data
 cd firmware
-pio run -t uploadfs        # writes firmware\data into the ESP32's SPIFFS
+pio run -t uploadfs        # writes firmware\data into the ESP32's LittleFS
 ```
 
 `uploadfs` uses the same USB connection as firmware flashing. Re-run these
@@ -126,7 +126,7 @@ your ESP32's IP (or `poultry.local`). The dev server talks to the real
 hardware over WebSocket. When you're happy, deploy with step 3.
 
 **Firmware changes:** edit, then `pio run -t upload` again. Schedules and
-timings saved from the dashboard live in SPIFFS (`/config.json`) and
+timings saved from the dashboard live in LittleFS (`/config.json`) and
 survive reflashes (firmware upload doesn't erase the filesystem; `uploadfs`
 rewrites it, but the deploy script preserves `config.json` in `firmware\data`).
 

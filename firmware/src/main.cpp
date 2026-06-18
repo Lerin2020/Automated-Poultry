@@ -6,7 +6,7 @@
 #include <PicoMQTT.h>
 #include <PicoWebsocket.h>
 #include <WebServer.h>
-#include <SPIFFS.h>
+#include <LittleFS.h>
 #include "config.h"
 
 RTC_DS3231 rtc;
@@ -124,29 +124,21 @@ void handleConfigCommand(const String& message) {
   String action = doc["action"].as<String>();
   
   if (action == "update_schedule") {
-    if (doc["feed"].is<JsonArray>() && doc["feed"].as<JsonArray>().size() == 2) {
-      schedFeedHours[0] = constrain(doc["feed"][0].as<int>(), 0, 23);
-      schedFeedHours[1] = constrain(doc["feed"][1].as<int>(), 0, 23);
-    }
-    if (doc["egg"].is<JsonArray>() && doc["egg"].as<JsonArray>().size() == 2) {
-      schedEggHours[0] = constrain(doc["egg"][0].as<int>(), 0, 23);
-      schedEggHours[1] = constrain(doc["egg"][1].as<int>(), 0, 23);
-    }
-    if (doc["waste"].is<JsonArray>() && doc["waste"].as<JsonArray>().size() == 2) {
-      schedWasteHours[0] = constrain(doc["waste"][0].as<int>(), 0, 23);
-      schedWasteHours[1] = constrain(doc["waste"][1].as<int>(), 0, 23);
-    }
+    // Schedules arrive as arrays of [hour, minute] pairs (1–3 slots each)
+    if (doc["feed"].is<JsonArray>())  pairsJsonToSlots(doc["feed"].as<JsonArrayConst>(),  schedFeed);
+    if (doc["egg"].is<JsonArray>())   pairsJsonToSlots(doc["egg"].as<JsonArrayConst>(),   schedEgg);
+    if (doc["waste"].is<JsonArray>()) pairsJsonToSlots(doc["waste"].as<JsonArrayConst>(), schedWaste);
     if (doc["egg_threshold"].is<int>()) {
       eggThreshold = max(1, doc["egg_threshold"].as<int>());
     }
-    
+
     saveScheduleConfig();
     publishCurrentConfig();
-    
-    Serial.printf("[CONFIG] Updated: Feed[%d,%d] Egg[%d,%d] Waste[%d,%d] Threshold=%d\n",
-      schedFeedHours[0], schedFeedHours[1],
-      schedEggHours[0], schedEggHours[1],
-      schedWasteHours[0], schedWasteHours[1],
+
+    Serial.printf("[CONFIG] Schedule updated (min-of-day): Feed[%d,%d,%d] Egg[%d,%d,%d] Waste[%d,%d,%d] Threshold=%d\n",
+      schedFeed[0], schedFeed[1], schedFeed[2],
+      schedEgg[0], schedEgg[1], schedEgg[2],
+      schedWaste[0], schedWaste[1], schedWaste[2],
       eggThreshold);
   }
   else if (action == "clear_queue") {
@@ -291,23 +283,23 @@ void setup() {
     else if (path.endsWith(".json")) contentType = "application/json";
     
     // Try gzipped version first (much smaller)
-    if (SPIFFS.exists(path + ".gz")) {
-      File file = SPIFFS.open(path + ".gz", "r");
+    if (LittleFS.exists(path + ".gz")) {
+      File file = LittleFS.open(path + ".gz", "r");
       webServer.streamFile(file, contentType);
       file.close();
       return;
     }
     
-    if (SPIFFS.exists(path)) {
-      File file = SPIFFS.open(path, "r");
+    if (LittleFS.exists(path)) {
+      File file = LittleFS.open(path, "r");
       webServer.streamFile(file, contentType);
       file.close();
       return;
     }
     
     // SPA fallback: serve index.html for client-side routing
-    if (SPIFFS.exists("/index.html")) {
-      File file = SPIFFS.open("/index.html", "r");
+    if (LittleFS.exists("/index.html")) {
+      File file = LittleFS.open("/index.html", "r");
       webServer.streamFile(file, "text/html");
       file.close();
       return;
@@ -317,8 +309,8 @@ void setup() {
   });
   // Activity log download endpoint — GET /log serves /activity_log.json
   webServer.on("/log", HTTP_GET, []() {
-    if (SPIFFS.exists(LOG_FILE)) {
-      File file = SPIFFS.open(LOG_FILE, "r");
+    if (LittleFS.exists(LOG_FILE)) {
+      File file = LittleFS.open(LOG_FILE, "r");
       webServer.sendHeader("Content-Disposition", "attachment; filename=poultry_activity_log.json");
       webServer.streamFile(file, "application/json");
       file.close();
@@ -374,27 +366,27 @@ void loop() {
     publishMessage(TOPIC_EGG_DATA, "{\"eggs_l1\": 0, \"eggs_l2\": 0, \"total\": 0}");
   }
 
-  // Dynamic Feeding Schedule — skip if cycle already active
+  // Dynamic Feeding Schedule — fire once when the minute matches an active slot
   if (feedState == FEED_IDLE &&
-      (now.hour() == schedFeedHours[0] || now.hour() == schedFeedHours[1]) &&
+      slotMatches(schedFeed, now.hour(), now.minute()) &&
       (now.unixtime() - lastFeedEpoch > GRACE_PERIOD_SEC)) {
     lastFeedEpoch = now.unixtime();
     saveLastRunEpochs();
     startFeedingCycle();
   }
 
-  // Dynamic Egg Collection Schedule — skip if cycle already active
+  // Dynamic Egg Collection Schedule — fire once when the minute matches a slot
   if (eggState == EGG_IDLE &&
-      (now.hour() == schedEggHours[0] || now.hour() == schedEggHours[1]) &&
+      slotMatches(schedEgg, now.hour(), now.minute()) &&
       (now.unixtime() - lastEggEpoch > GRACE_PERIOD_SEC)) {
     lastEggEpoch = now.unixtime();
     saveLastRunEpochs();
     startEggCollection();
   }
 
-  // Dynamic Waste Management Schedule — skip if cycle already active
+  // Dynamic Waste Management Schedule — fire once when the minute matches a slot
   if (wasteState == WASTE_IDLE &&
-      (now.hour() == schedWasteHours[0] || now.hour() == schedWasteHours[1]) &&
+      slotMatches(schedWaste, now.hour(), now.minute()) &&
       (now.unixtime() - lastWasteEpoch > GRACE_PERIOD_SEC)) {
     lastWasteEpoch = now.unixtime();
     saveLastRunEpochs();

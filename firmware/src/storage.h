@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include <SPIFFS.h>
+#include <LittleFS.h>
 #include <ArduinoJson.h>
 #include "config.h"
 #include "RTClib.h"
@@ -10,11 +10,51 @@
 extern RTC_DS3231 rtc;
 extern PicoMQTT::Server mqtt;
 
-// ─── Mutable schedule variables (loaded from SPIFFS, updated via MQTT) ───
-int schedFeedHours[2]  = {DEFAULT_FEED_HOURS[0], DEFAULT_FEED_HOURS[1]};
-int schedEggHours[2]   = {DEFAULT_EGG_HOURS[0], DEFAULT_EGG_HOURS[1]};
-int schedWasteHours[2] = {DEFAULT_WASTE_HOURS[0], DEFAULT_WASTE_HOURS[1]};
+// ─── Mutable schedule variables (loaded from filesystem, updated via MQTT) ───
+// Each is up to MAX_SCHED_SLOTS slots of minute-of-day (0–1439); -1 = unused.
+int schedFeed[MAX_SCHED_SLOTS]  = {DEFAULT_FEED_SLOTS[0],  DEFAULT_FEED_SLOTS[1],  DEFAULT_FEED_SLOTS[2]};
+int schedEgg[MAX_SCHED_SLOTS]   = {DEFAULT_EGG_SLOTS[0],   DEFAULT_EGG_SLOTS[1],   DEFAULT_EGG_SLOTS[2]};
+int schedWaste[MAX_SCHED_SLOTS] = {DEFAULT_WASTE_SLOTS[0], DEFAULT_WASTE_SLOTS[1], DEFAULT_WASTE_SLOTS[2]};
 int eggThreshold       = DEFAULT_EGG_THRESHOLD;
+
+// ── Schedule slot helpers ──
+// Config file stores compact minute-of-day ints; MQTT uses [hour,minute] pairs
+// for dashboard friendliness. These convert between the two and the internal
+// arrays. Unused slots (-1) are skipped on the way out.
+inline void slotsToMinutesJson(JsonArray arr, const int* slots) {
+  for (int i = 0; i < MAX_SCHED_SLOTS; i++) if (slots[i] >= 0) arr.add(slots[i]);
+}
+inline void minutesJsonToSlots(JsonArrayConst arr, int* slots) {
+  for (int i = 0; i < MAX_SCHED_SLOTS; i++) slots[i] = -1;
+  int idx = 0;
+  for (JsonVariantConst v : arr)
+    if (idx < MAX_SCHED_SLOTS && v.is<int>()) slots[idx++] = constrain(v.as<int>(), 0, 1439);
+}
+inline void slotsToPairsJson(JsonArray arr, const int* slots) {
+  for (int i = 0; i < MAX_SCHED_SLOTS; i++) if (slots[i] >= 0) {
+    JsonArray s = arr.add<JsonArray>();
+    s.add(slots[i] / 60);
+    s.add(slots[i] % 60);
+  }
+}
+inline void pairsJsonToSlots(JsonArrayConst arr, int* slots) {
+  for (int i = 0; i < MAX_SCHED_SLOTS; i++) slots[i] = -1;
+  int idx = 0;
+  for (JsonVariantConst v : arr) {
+    if (idx >= MAX_SCHED_SLOTS) break;
+    if (v.is<JsonArrayConst>() && v.as<JsonArrayConst>().size() == 2) {
+      int h = constrain(v[0].as<int>(), 0, 23);
+      int m = constrain(v[1].as<int>(), 0, 59);
+      slots[idx++] = h * 60 + m;
+    }
+  }
+}
+// True if any active slot equals the current hour:minute.
+inline bool slotMatches(const int* slots, int hour, int minute) {
+  int mod = hour * 60 + minute;
+  for (int i = 0; i < MAX_SCHED_SLOTS; i++) if (slots[i] >= 0 && slots[i] == mod) return true;
+  return false;
+}
 
 // ─── Mutable cycle timing variables (editable from dashboard) ───
 unsigned long feedDistributeDuration = DEFAULT_FEED_DISTRIBUTE_DURATION;
@@ -29,14 +69,14 @@ int feedReturnSpeedPct = DEFAULT_FEED_RETURN_SPEED; // gantry reverse duty %
 int augerMode          = DEFAULT_AUGER_MODE;        // see AUGER_* in config.h
 
 void initStorage() {
-  if (!SPIFFS.begin(true)) {
-    Serial.println("An Error has occurred while mounting SPIFFS");
+  if (!LittleFS.begin(true)) {
+    Serial.println("An Error has occurred while mounting LittleFS");
     return;
   }
-  Serial.println("SPIFFS mounted successfully");
+  Serial.println("LittleFS mounted successfully");
   
-  if(!SPIFFS.exists(QUEUE_FILE)){
-    File file = SPIFFS.open(QUEUE_FILE, FILE_WRITE);
+  if(!LittleFS.exists(QUEUE_FILE)){
+    File file = LittleFS.open(QUEUE_FILE, FILE_WRITE);
     if(file){
       file.print("[]");
       file.close();
@@ -49,7 +89,7 @@ void initStorage() {
 void logOfflineMessage(String topic, String payload) {
   Serial.println("[STORAGE] Queuing offline message...");
   
-  File file = SPIFFS.open(QUEUE_FILE, FILE_READ);
+  File file = LittleFS.open(QUEUE_FILE, FILE_READ);
   if (!file) return;
 
   size_t size = file.size();
@@ -75,7 +115,7 @@ void logOfflineMessage(String topic, String payload) {
   newMsg["topic"] = topic;
   newMsg["payload"] = payload;
 
-  file = SPIFFS.open(QUEUE_FILE, FILE_WRITE);
+  file = LittleFS.open(QUEUE_FILE, FILE_WRITE);
   if (file) {
     serializeJson(doc, file);
     file.close();
@@ -83,7 +123,7 @@ void logOfflineMessage(String topic, String payload) {
 }
 
 void syncOfflineQueue() {
-  File file = SPIFFS.open(QUEUE_FILE, FILE_READ);
+  File file = LittleFS.open(QUEUE_FILE, FILE_READ);
   if (!file) return;
 
   size_t size = file.size();
@@ -112,7 +152,7 @@ void syncOfflineQueue() {
     }
 
     // Clear after sync
-    file = SPIFFS.open(QUEUE_FILE, FILE_WRITE);
+    file = LittleFS.open(QUEUE_FILE, FILE_WRITE);
     if(file){
       file.print("[]");
       file.close();
@@ -124,7 +164,7 @@ void syncOfflineQueue() {
 // ─── Queue Helpers ───
 
 int getQueueSize() {
-  File file = SPIFFS.open(QUEUE_FILE, FILE_READ);
+  File file = LittleFS.open(QUEUE_FILE, FILE_READ);
   if (!file) return 0;
 
   size_t size = file.size();
@@ -140,7 +180,7 @@ int getQueueSize() {
 }
 
 void clearOfflineQueue() {
-  File file = SPIFFS.open(QUEUE_FILE, FILE_WRITE);
+  File file = LittleFS.open(QUEUE_FILE, FILE_WRITE);
   if (file) {
     file.print("[]");
     file.close();
@@ -152,17 +192,10 @@ void clearOfflineQueue() {
 
 void saveScheduleConfig() {
   JsonDocument doc;
-  JsonArray feed = doc["feed"].to<JsonArray>();
-  feed.add(schedFeedHours[0]);
-  feed.add(schedFeedHours[1]);
-
-  JsonArray egg = doc["egg"].to<JsonArray>();
-  egg.add(schedEggHours[0]);
-  egg.add(schedEggHours[1]);
-
-  JsonArray waste = doc["waste"].to<JsonArray>();
-  waste.add(schedWasteHours[0]);
-  waste.add(schedWasteHours[1]);
+  // Schedules stored as compact minute-of-day arrays (active slots only)
+  slotsToMinutesJson(doc["feed"].to<JsonArray>(),  schedFeed);
+  slotsToMinutesJson(doc["egg"].to<JsonArray>(),   schedEgg);
+  slotsToMinutesJson(doc["waste"].to<JsonArray>(), schedWaste);
 
   doc["egg_threshold"] = eggThreshold;
 
@@ -178,21 +211,21 @@ void saveScheduleConfig() {
   doc["feed_return_speed"] = feedReturnSpeedPct;
   doc["auger_mode"]        = augerMode;
 
-  File file = SPIFFS.open(CONFIG_FILE, FILE_WRITE);
+  File file = LittleFS.open(CONFIG_FILE, FILE_WRITE);
   if (file) {
     serializeJson(doc, file);
     file.close();
-    Serial.println("[CONFIG] Config saved to SPIFFS.");
+    Serial.println("[CONFIG] Config saved to LittleFS.");
   }
 }
 
 void loadScheduleConfig() {
-  if (!SPIFFS.exists(CONFIG_FILE)) {
+  if (!LittleFS.exists(CONFIG_FILE)) {
     Serial.println("[CONFIG] No config file found, using defaults.");
     return;
   }
 
-  File file = SPIFFS.open(CONFIG_FILE, FILE_READ);
+  File file = LittleFS.open(CONFIG_FILE, FILE_READ);
   if (!file) return;
 
   size_t size = file.size();
@@ -206,18 +239,9 @@ void loadScheduleConfig() {
     return;
   }
 
-  if (doc["feed"].is<JsonArray>() && doc["feed"].as<JsonArray>().size() == 2) {
-    schedFeedHours[0] = doc["feed"][0].as<int>();
-    schedFeedHours[1] = doc["feed"][1].as<int>();
-  }
-  if (doc["egg"].is<JsonArray>() && doc["egg"].as<JsonArray>().size() == 2) {
-    schedEggHours[0] = doc["egg"][0].as<int>();
-    schedEggHours[1] = doc["egg"][1].as<int>();
-  }
-  if (doc["waste"].is<JsonArray>() && doc["waste"].as<JsonArray>().size() == 2) {
-    schedWasteHours[0] = doc["waste"][0].as<int>();
-    schedWasteHours[1] = doc["waste"][1].as<int>();
-  }
+  if (doc["feed"].is<JsonArray>())  minutesJsonToSlots(doc["feed"].as<JsonArrayConst>(),  schedFeed);
+  if (doc["egg"].is<JsonArray>())   minutesJsonToSlots(doc["egg"].as<JsonArrayConst>(),   schedEgg);
+  if (doc["waste"].is<JsonArray>()) minutesJsonToSlots(doc["waste"].as<JsonArrayConst>(), schedWaste);
   if (doc["egg_threshold"].is<int>()) {
     eggThreshold = doc["egg_threshold"].as<int>();
   }
@@ -234,10 +258,10 @@ void loadScheduleConfig() {
   if (doc["feed_return_speed"].is<int>()) feedReturnSpeedPct = constrain(doc["feed_return_speed"].as<int>(), 0, 100);
   if (doc["auger_mode"].is<int>())        augerMode          = constrain(doc["auger_mode"].as<int>(), 0, 3);
 
-  Serial.printf("[CONFIG] Loaded: Feed[%d,%d] Egg[%d,%d] Waste[%d,%d] Threshold=%d\n",
-    schedFeedHours[0], schedFeedHours[1],
-    schedEggHours[0], schedEggHours[1],
-    schedWasteHours[0], schedWasteHours[1],
+  Serial.printf("[CONFIG] Loaded slots(min-of-day): Feed[%d,%d,%d] Egg[%d,%d,%d] Waste[%d,%d,%d] Threshold=%d\n",
+    schedFeed[0], schedFeed[1], schedFeed[2],
+    schedEgg[0], schedEgg[1], schedEgg[2],
+    schedWaste[0], schedWaste[1], schedWaste[2],
     eggThreshold);
   Serial.printf("[CONFIG] Timings(ms): FeedDist=%lu FeedPause=%lu FeedRev=%lu EggCol=%lu Waste=%lu\n",
     feedDistributeDuration, feedPauseDuration, feedReverseDuration, eggCollectDuration, wasteCycleDuration);
@@ -251,7 +275,7 @@ const int MAX_LOG_ENTRIES = 200;
 void logActivity(const char* subsystem, const char* event, const char* detail = "") {
   // Read existing log
   JsonDocument doc;
-  File file = SPIFFS.open(LOG_FILE, FILE_READ);
+  File file = LittleFS.open(LOG_FILE, FILE_READ);
   if (file && file.size() > 4) {
     size_t sz = file.size();
     std::unique_ptr<char[]> buf(new char[sz]);
@@ -278,7 +302,7 @@ void logActivity(const char* subsystem, const char* event, const char* detail = 
   entry["evt"] = event;
   if (strlen(detail) > 0) entry["det"] = detail;
 
-  file = SPIFFS.open(LOG_FILE, FILE_WRITE);
+  file = LittleFS.open(LOG_FILE, FILE_WRITE);
   if (file) { serializeJson(doc, file); file.close(); }
 }
 
@@ -297,13 +321,13 @@ void saveLastRunEpochs() {
   doc["feed"]  = lastFeedEpoch;
   doc["egg"]   = lastEggEpoch;
   doc["waste"] = lastWasteEpoch;
-  File file = SPIFFS.open(EPOCH_FILE, FILE_WRITE);
+  File file = LittleFS.open(EPOCH_FILE, FILE_WRITE);
   if (file) { serializeJson(doc, file); file.close(); }
 }
 
 void loadLastRunEpochs(unsigned long bootEpoch) {
-  if (!SPIFFS.exists(EPOCH_FILE)) return;
-  File file = SPIFFS.open(EPOCH_FILE, FILE_READ);
+  if (!LittleFS.exists(EPOCH_FILE)) return;
+  File file = LittleFS.open(EPOCH_FILE, FILE_READ);
   if (!file) return;
   size_t size = file.size();
   std::unique_ptr<char[]> buf(new char[size]);
@@ -326,12 +350,10 @@ void loadLastRunEpochs(unsigned long bootEpoch) {
 void publishCurrentConfig() {
   JsonDocument doc;
   
-  JsonArray feed = doc["feed"].to<JsonArray>();
-  feed.add(schedFeedHours[0]); feed.add(schedFeedHours[1]);
-  JsonArray egg = doc["egg"].to<JsonArray>();
-  egg.add(schedEggHours[0]); egg.add(schedEggHours[1]);
-  JsonArray waste = doc["waste"].to<JsonArray>();
-  waste.add(schedWasteHours[0]); waste.add(schedWasteHours[1]);
+  // Schedules sent as arrays of [hour, minute] pairs (active slots only)
+  slotsToPairsJson(doc["feed"].to<JsonArray>(),  schedFeed);
+  slotsToPairsJson(doc["egg"].to<JsonArray>(),   schedEgg);
+  slotsToPairsJson(doc["waste"].to<JsonArray>(), schedWaste);
   doc["egg_threshold"] = eggThreshold;
 
   // Send timings in SECONDS for dashboard display

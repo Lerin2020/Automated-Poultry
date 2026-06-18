@@ -69,7 +69,10 @@ const char* MDNS_HOSTNAME = "poultry";  // Reachable at poultry.local
 // ==========================================
 // THRESHOLDS & SETTINGS
 // ==========================================
-const unsigned long GRACE_PERIOD_SEC = 600;      // 10 mins anti-retrigger buffer (compared against unixtime deltas)
+// Anti-double-trigger buffer (seconds). With minute-precision schedules the
+// match window is only 60 s, so this just needs to exceed one minute to stop
+// the same slot from firing twice. Keep schedule slots ≥2 minutes apart.
+const unsigned long GRACE_PERIOD_SEC = 90;
 
 // ==========================================
 // CYCLE TIMING DEFAULTS (milliseconds)
@@ -103,10 +106,15 @@ const int DEFAULT_AUGER_MODE = AUGER_DISTRIBUTE_ONLY;
 // System
 const unsigned long HEARTBEAT_INTERVAL_SEC = 30;    // Seconds between heartbeats
 
-// Default schedules (can be overridden via MQTT and persisted to SPIFFS)
-const int DEFAULT_FEED_HOURS[] = {7, 17};
-const int DEFAULT_EGG_HOURS[]  = {8, 20};
-const int DEFAULT_WASTE_HOURS[] = {6, 18};
+// ── Default schedules ──
+// Each system supports up to MAX_SCHED_SLOTS time-of-day slots. Slots store
+// minute-of-day (0–1439); -1 means the slot is unused. Two slots are seeded by
+// default; the dashboard can add/remove slots (1–3). Overridable via MQTT and
+// persisted to the filesystem.
+#define MAX_SCHED_SLOTS 3
+const int DEFAULT_FEED_SLOTS[MAX_SCHED_SLOTS]  = {  7*60, 17*60, -1 };
+const int DEFAULT_EGG_SLOTS[MAX_SCHED_SLOTS]   = {  8*60, 20*60, -1 };
+const int DEFAULT_WASTE_SLOTS[MAX_SCHED_SLOTS] = {  6*60, 18*60, -1 };
 const int DEFAULT_EGG_THRESHOLD = 50;
 
 const float TEMP_DANGER = 40.0;   // Celsius — triggers danger alert

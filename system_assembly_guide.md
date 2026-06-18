@@ -128,8 +128,8 @@ const char* WIFI_PASS = "YOUR_WIFI_PASSWORD";
 4. Click the **Plug icon (🔌)** to open the Serial Monitor (Baud rate `115200`). You should see output like:
 
 ```
-SPIFFS mounted successfully
-[CONFIG] Loaded: Feed[7,17] Egg[8,20] Waste[6,18] Threshold=50
+LittleFS mounted successfully
+[CONFIG] Loaded slots(min-of-day): Feed[420,1020,-1] Egg[480,1200,-1] Waste[360,1080,-1] Threshold=50
 [HW] DHT22 initialized on GPIO 6
 Connecting to WiFi...
 WiFi connected! IP: 192.168.x.x
@@ -177,15 +177,19 @@ The dashboard has two tabs: **Controls** (the main operations view) and **Admin*
 - **WiFi Signal**: RSSI strength displayed as a percentage gauge with raw dBm value.
 - **Free Heap**: Available ESP32 RAM — useful for detecting memory leaks.
 - **RTC Clock**: A live ticking clock synced from the ESP32's DS3231 RTC. Ticks locally between heartbeats.
-- **Offline Queue**: Shows how many MQTT messages are queued in SPIFFS waiting for reconnection. The **Clear** button wipes the queue manually.
+- **Offline Queue**: Shows how many MQTT messages are queued on the LittleFS filesystem waiting for reconnection. The **Clear** button wipes the queue manually.
 
 ### Schedule Configuration
 All automation schedules can be changed **without re-flashing firmware**:
 
-1. Use the hour pickers to set two times per subsystem (feeding, egg collection, waste flush).
-2. Adjust the **Egg Alert Threshold** slider (10–200 eggs).
-3. Click **Push to ESP32** — the config is sent over MQTT and saved to SPIFFS on the ESP32.
-4. Schedules **persist across reboots** (stored in `/config.json` on the ESP32's flash).
+1. Set the time(s) for each subsystem (feeding, egg collection, waste flush) using the **HH:MM time pickers** — any minute of the day is valid (e.g. `05:03`).
+2. Each subsystem starts with **two time slots**; use **+ Add time** for a third, or **×** to remove one (minimum one slot). A cycle fires once when the clock reaches a slot.
+3. Adjust the **Egg Alert Threshold** slider (10–200 eggs).
+4. Click **Push to ESP32** — the config is sent over MQTT and saved to LittleFS on the ESP32.
+5. Schedules **persist across reboots** (stored in `/config.json` on the ESP32's flash). Keep slots **≥2 minutes apart**.
+
+> [!NOTE]
+> The ESP must be powered at the scheduled minute to run that cycle — a missed minute (e.g. during a reboot) is skipped rather than caught up later.
 
 ### Event Log
 - Captures all MQTT events (except noisy heartbeats) in a scrollable, color-coded table.

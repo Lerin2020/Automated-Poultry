@@ -73,6 +73,36 @@ function HourPicker({ value, onChange }) {
   );
 }
 
+// Editor for a system's schedule: 1–3 time-of-day slots, each [hour, minute].
+function TimeSlots({ label, slots, setSlots, max = 3 }) {
+  const toStr = ([h, m]) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  const update = (i, val) => {
+    const [h, m] = val.split(':').map(Number);
+    const next = slots.map((s, j) => j === i ? [h || 0, m || 0] : s);
+    setSlots(next);
+  };
+  const add = () => { if (slots.length < max) setSlots([...slots, [12, 0]]); };
+  const remove = (i) => { if (slots.length > 1) setSlots(slots.filter((_, j) => j !== i)); };
+  return (
+    <div>
+      <label className="label">{label}</label>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {slots.map((s, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="time" className="input" value={toStr(s)} onChange={e => update(i, e.target.value)} style={{ flex: 1 }} />
+            {slots.length > 1 && (
+              <button onClick={() => remove(i)} className="btn-sm btn-sm-danger" title="Remove time" style={{ padding: '6px 10px' }}>×</button>
+            )}
+          </div>
+        ))}
+        {slots.length < max && (
+          <button onClick={add} className="btn-sm" style={{ alignSelf: 'flex-start' }}>+ Add time</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPanel({ heartbeatData, publish, subscribe, onAnyMessage, isESPOnline, brokerHost }) {
   // ── RTC clock — parse ISO string with explicit local interpretation ──
   const [rtcTime, setRtcTime] = useState(null);
@@ -103,10 +133,10 @@ export default function AdminPanel({ heartbeatData, publish, subscribe, onAnyMes
     return () => clearInterval(timer);
   }, []);
 
-  // ── Schedule ──
-  const [schedFeed, setSchedFeed] = useState([7, 17]);
-  const [schedEgg, setSchedEgg] = useState([8, 20]);
-  const [schedWaste, setSchedWaste] = useState([6, 18]);
+  // ── Schedule ── each system is an array of [hour, minute] slots (1–3)
+  const [schedFeed, setSchedFeed] = useState([[7, 0], [17, 0]]);
+  const [schedEgg, setSchedEgg] = useState([[8, 0], [20, 0]]);
+  const [schedWaste, setSchedWaste] = useState([[6, 0], [18, 0]]);
   const [eggThreshold, setEggThreshold] = useState(50);
   const [pushed, setPushed] = useState(false);
   const [rtcSynced, setRtcSynced] = useState(false);
@@ -142,9 +172,11 @@ export default function AdminPanel({ heartbeatData, publish, subscribe, onAnyMes
     const unsub = subscribe('poultry/config/status', msg => {
       try {
         const c = JSON.parse(msg.payloadString);
-        if(c.feed) setSchedFeed(c.feed);
-        if(c.egg) setSchedEgg(c.egg);
-        if(c.waste) setSchedWaste(c.waste);
+        // Each slot arrives as [hour, minute]; tolerate a legacy bare-hour number.
+        const norm = arr => Array.isArray(arr) ? arr.map(s => Array.isArray(s) ? [s[0], s[1] ?? 0] : [s, 0]) : arr;
+        if(c.feed) setSchedFeed(norm(c.feed));
+        if(c.egg) setSchedEgg(norm(c.egg));
+        if(c.waste) setSchedWaste(norm(c.waste));
         if(c.egg_threshold!==undefined) setEggThreshold(c.egg_threshold);
         // Timings come as seconds from ESP32
         if(c.feed_distribute!==undefined) setFeedDistribute(c.feed_distribute);
@@ -277,9 +309,9 @@ export default function AdminPanel({ heartbeatData, publish, subscribe, onAnyMes
           Schedule Configuration
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <div><label className="label">Feeding Times</label><div className="grid-cards"  style={{ gridTemplateColumns: '1fr 1fr' }}><HourPicker value={schedFeed[0]} onChange={h=>setSchedFeed([h,schedFeed[1]])} /><HourPicker value={schedFeed[1]} onChange={h=>setSchedFeed([schedFeed[0],h])} /></div></div>
-          <div><label className="label">Egg Collection Times</label><div className="grid-cards" style={{ gridTemplateColumns: '1fr 1fr' }}><HourPicker value={schedEgg[0]} onChange={h=>setSchedEgg([h,schedEgg[1]])} /><HourPicker value={schedEgg[1]} onChange={h=>setSchedEgg([schedEgg[0],h])} /></div></div>
-          <div><label className="label">Waste Flush Times</label><div className="grid-cards" style={{ gridTemplateColumns: '1fr 1fr' }}><HourPicker value={schedWaste[0]} onChange={h=>setSchedWaste([h,schedWaste[1]])} /><HourPicker value={schedWaste[1]} onChange={h=>setSchedWaste([schedWaste[0],h])} /></div></div>
+          <TimeSlots label="Feeding Times" slots={schedFeed} setSlots={setSchedFeed} />
+          <TimeSlots label="Egg Collection Times" slots={schedEgg} setSlots={setSchedEgg} />
+          <TimeSlots label="Waste Flush Times" slots={schedWaste} setSlots={setSchedWaste} />
           <div><label className="label">Egg Alert Threshold: <span style={{ color: '#6366f1' }}>{eggThreshold}</span></label><input type="range" min="10" max="200" value={eggThreshold} onChange={e=>setEggThreshold(+e.target.value)} className="range" /><div className="range-labels"><span>10</span><span>200</span></div></div>
           <button onClick={pushConfig} disabled={!isESPOnline} className="btn-primary" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {pushed ? <><Check size={16} className="anim-check" /> Config Pushed!</> : <><Save size={16} /> Push to ESP32</>}

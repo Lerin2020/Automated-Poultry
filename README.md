@@ -22,7 +22,7 @@ served by the ESP32 itself. No PC server, no cloud, no internet required.
   your browser's clock.
 - **Environment monitoring** — DHT22 temp/humidity with a high-temperature
   danger alert (≥ 40 °C).
-- **Web dashboard** — React app served from the ESP32's SPIFFS at
+- **Web dashboard** — React app served from the ESP32's LittleFS at
   `http://poultry.local`; manual start/stop, live egg counts, schedule and
   cycle-duration editing, system heartbeat, and a live MQTT event log.
 - **Offline resilience** — egg data and alerts generated while WiFi is down
@@ -33,7 +33,7 @@ served by the ESP32 itself. No PC server, no cloud, no internet required.
 ```
 ┌─────────────────────────── ESP32-S3 ───────────────────────────┐
 │  • PicoMQTT broker      → port 1883 (TCP) + port 81 (WebSocket)│
-│  • HTTP server          → port 80, serves dashboard from SPIFFS│
+│  • HTTP server          → port 80, serves dashboard from LittleFS│
 │  • Non-blocking state machines → feed / eggs / waste           │
 │  • DS3231 RTC + DHT22   → schedules + environment              │
 └────────────────────────────────────────────────────────────────┘
@@ -52,7 +52,7 @@ the same device it was served from.
 | [firmware/](firmware/) | PlatformIO project (Arduino framework, ESP32-S3 DevKitC-1) |
 | [firmware/src/config.h](firmware/src/config.h) | Pin map, MQTT topics, defaults |
 | [firmware/src/hardware.h](firmware/src/hardware.h) | Motor state machines, sensors |
-| [firmware/src/storage.h](firmware/src/storage.h) | SPIFFS config persistence + offline queue |
+| [firmware/src/storage.h](firmware/src/storage.h) | LittleFS config persistence + offline queue |
 | [dashboard/](dashboard/) | React + Vite dashboard |
 | [RUNNING.md](RUNNING.md) | **Full setup & operations guide** |
 | [system_assembly_guide.md](system_assembly_guide.md) | Mechanical/wiring assembly |
@@ -70,7 +70,7 @@ Copy-Item firmware\src\secrets.example.h firmware\src\secrets.h
 cd firmware
 pio run -t upload
 
-# 3. Build & upload the dashboard to SPIFFS
+# 3. Build & upload the dashboard to LittleFS
 cd ..
 cd dashboard; npm install; cd ..
 .\deploy_dashboard.ps1

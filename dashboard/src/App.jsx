@@ -18,7 +18,7 @@ function App() {
   const [feedState, setFeedState] = useState({ state: 'idle' });
   const [eggState, setEggState] = useState({ state: 'idle', eggs_l1: 0, eggs_l2: 0, total: 0 });
   const [wasteState, setWasteState] = useState({ state: 'idle' });
-  const [schedule, setSchedule] = useState({ feed: [7, 17], egg: [8, 20], waste: [6, 18] });
+  const [schedule, setSchedule] = useState({ feed: [[7, 0], [17, 0]], egg: [[8, 0], [20, 0]], waste: [[6, 0], [18, 0]] });
   const prevEggTotal = useRef(0);
   const [eggAnimKey, setEggAnimKey] = useState(0);
 
@@ -70,7 +70,11 @@ function App() {
         setWasteState(p => ({...p, ...d}));
       }),
       subscribe('poultry/alerts', () => { if (activeTab !== 'admin') setAlertCount(c => c+1); }),
-      subscribe('poultry/config/status', m => { const c = JSON.parse(m.payloadString); setSchedule(p => ({ feed: c.feed || p.feed, egg: c.egg || p.egg, waste: c.waste || p.waste })); }),
+      subscribe('poultry/config/status', m => {
+        const c = JSON.parse(m.payloadString);
+        const norm = arr => Array.isArray(arr) ? arr.map(s => Array.isArray(s) ? [s[0], s[1] ?? 0] : [s, 0]) : null;
+        setSchedule(p => ({ feed: norm(c.feed) || p.feed, egg: norm(c.egg) || p.egg, waste: norm(c.waste) || p.waste }));
+      }),
     ];
     return () => u.forEach(fn => fn());
   }, [subscribe, activeTab]);
@@ -87,12 +91,15 @@ function App() {
   const handleWaste = () => publish('poultry/waste/cmd', JSON.stringify({ action: 'start' }));
   const handleStopWaste = () => publish('poultry/waste/cmd', JSON.stringify({ action: 'stop' }));
 
-  const getNext = (hours) => {
-    const hrs = [...hours].sort((a, b) => a - b);
-    const ch = new Date().getHours();
-    let n = hrs.find(h => h > ch), tom = false;
-    if (n === undefined) { n = hrs[0]; tom = true; }
-    return `${n%12===0?12:n%12}:00 ${n>=12?'PM':'AM'}${tom?' (Tomorrow)':''}`;
+  const getNext = (slots) => {
+    if (!Array.isArray(slots) || !slots.length) return '--';
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const mins = slots.map(([h, m]) => h * 60 + (m || 0)).sort((a, b) => a - b);
+    let n = mins.find(m => m > nowMin), tom = false;
+    if (n === undefined) { n = mins[0]; tom = true; }
+    const h = Math.floor(n / 60), m = n % 60;
+    return `${h%12===0?12:h%12}:${String(m).padStart(2,'0')} ${h>=12?'PM':'AM'}${tom?' (Tomorrow)':''}`;
   };
 
   const LiveBadge = () => <span className="live-badge anim-ring"><Activity size={13} strokeWidth={2.5} /> LIVE</span>;
@@ -330,7 +337,7 @@ function App() {
       {activeTab === 'admin' && <AdminPanel heartbeatData={heartbeatData} publish={publish} subscribe={subscribe} onAnyMessage={onAnyMessage} isESPOnline={isESPOnline} brokerHost={brokerHost} />}
 
 
-      <footer className="footer">PoultryMG v1.0 — Automated Farm Intelligence</footer>
+      <footer className="footer">Automated Poultry Farm Management System</footer>
     </div>
   );
 }
