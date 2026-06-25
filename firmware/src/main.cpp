@@ -398,7 +398,12 @@ void loop() {
     lastHeartbeatEpoch = now.unixtime();
     
     readDHT();
-    
+    if (dhtValid) {
+      char sensorDetail[40];
+      snprintf(sensorDetail, sizeof(sensorDetail), "t=%.1f h=%.1f", lastTemp, lastHumidity);
+      logActivity("sensor", "reading", sensorDetail);
+    }
+
     char rtcBuf[25];
     snprintf(rtcBuf, sizeof(rtcBuf), "%04d-%02d-%02dT%02d:%02d:%02d",
       now.year(), now.month(), now.day(),
