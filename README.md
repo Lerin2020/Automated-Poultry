@@ -22,19 +22,16 @@ ESP32-S3-based cage automation — feeding, egg collection, waste management, an
 ## Setup
 
 ```powershell
-# 1. WiFi credentials (gitignored)
-Copy-Item firmware\src\secrets.example.h firmware\src\secrets.h
-# Edit secrets.h: set WIFI_SSID and WIFI_PASS (2.4 GHz only)
 
-# 2. Flash firmware
+# Flash firmware
 cd firmware
-& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -t upload
+pio run -t upload
 
-# 3. Build dashboard and upload to LittleFS
+# Build dashboard and upload to LittleFS
 cd ..
 .\deploy_dashboard.ps1
 cd firmware
-& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -t uploadfs
+pio run -t uploadfs
 ```
 
 Open **http://poultry.local** from any device on the same WiFi network.
