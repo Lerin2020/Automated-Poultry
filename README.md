@@ -34,7 +34,7 @@ cd firmware
 pio run -t uploadfs
 ```
 
-Open **http://poultry.local** from any device on the same WiFi network.
+Open **http://poultry.local** from any device on the same WiFi network to access the dashboard.
 
 ## Layout
 
